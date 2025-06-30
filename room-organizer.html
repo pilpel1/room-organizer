@@ -109,6 +109,113 @@
         .delete-btn:hover {
             background: #c82333;
         }
+        
+        /* Modal styles for editing furniture */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.4);
+        }
+        
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: none;
+            border-radius: 10px;
+            width: 400px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            direction: rtl;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .modal-header h2 {
+            margin: 0;
+            color: #333;
+        }
+        
+        .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 1;
+        }
+        
+        .close:hover,
+        .close:focus {
+            color: #000;
+        }
+        
+        .edit-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .edit-input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .edit-input-group label {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .edit-input-group input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .modal-buttons button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        .save-btn {
+            background: #28a745;
+            color: white;
+        }
+        
+        .save-btn:hover {
+            background: #218838;
+        }
+        
+        .cancel-btn {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .cancel-btn:hover {
+            background: #545b62;
+        }
     </style>
 </head>
 <body>
@@ -151,8 +258,37 @@
             <h3>רהיטים בחדר:</h3>
             <div id="furnitureList"></div>
             <p style="margin-top: 10px; font-size: 14px; color: #666;">
-                <strong>הוראות:</strong> לחץ על רהיט כדי לבחור אותו, גרור להזזה, לחץ R לסיבוב, לחץ Delete למחיקה
+                <strong>הוראות:</strong> לחץ על רהיט כדי לבחור אותו, גרור להזזה, לחץ R לסיבוב, לחץ Delete למחיקה<br>
+                <strong>קליק כפול</strong> על רהיט או על השם ברשימה לעריכה
             </p>
+        </div>
+    </div>
+
+    <!-- Edit Furniture Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>עריכת רהיט</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="edit-form">
+                <div class="edit-input-group">
+                    <label for="editName">שם הרהיט:</label>
+                    <input type="text" id="editName" placeholder="שם הרהיט">
+                </div>
+                <div class="edit-input-group">
+                    <label for="editWidth">רוחב (ס"מ):</label>
+                    <input type="number" id="editWidth" min="1">
+                </div>
+                <div class="edit-input-group">
+                    <label for="editHeight">אורך (ס"מ):</label>
+                    <input type="number" id="editHeight" min="1">
+                </div>
+                <div class="modal-buttons">
+                    <button class="save-btn" onclick="saveFurnitureEdit()">שמור</button>
+                    <button class="cancel-btn" onclick="closeEditModal()">ביטול</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -161,6 +297,7 @@
         const ctx = canvas.getContext('2d');
         let furniture = [];
         let selectedFurniture = null;
+        let editingFurniture = null;
         let isDragging = false;
         let dragOffset = { x: 0, y: 0 };
         let scale = 1; // pixels per cm
@@ -290,6 +427,21 @@
             const width = parseInt(document.getElementById('furnitureWidth').value);
             const height = parseInt(document.getElementById('furnitureHeight').value);
             
+            // Validate input
+            if (isNaN(width) || width < 1 || isNaN(height) || height < 1) {
+                alert('אנא הכנס מידות תקינות (מספרים חיוביים)');
+                return;
+            }
+            
+            // Check if furniture fits in room
+            const roomWidthCm = canvas.width / scale;
+            const roomHeightCm = canvas.height / scale;
+            
+            if (width > roomWidthCm || height > roomHeightCm) {
+                alert(`הרהיט גדול מדי עבור החדר!\nגודל החדר: ${Math.round(roomWidthCm)}x${Math.round(roomHeightCm)} ס"מ\nגודל הרהיט: ${width}x${height} ס"מ`);
+                return;
+            }
+            
             const newFurniture = new Furniture(name, width, height, 20, 20);
             furniture.push(newFurniture);
             
@@ -308,7 +460,9 @@
                 item.className = 'furniture-item' + (selectedFurniture === f ? ' selected' : '');
                 const rotationText = f.rotation ? ` (${f.rotation}°)` : '';
                 item.innerHTML = `
-                    <span onclick="selectFurniture('${f.id}')" style="cursor: pointer; flex-grow: 1;">
+                    <span onclick="selectFurniture('${f.id}')" ondblclick="openEditModal('${f.id}')" 
+                          style="cursor: pointer; flex-grow: 1;" 
+                          title="קליק כפול לעריכה">
                         ${f.name} (${f.getEffectiveWidth()}x${f.getEffectiveHeight()} ס"מ)${rotationText}
                     </span>
                     <button class="delete-btn" onclick="deleteFurniture('${f.id}')">מחק</button>
@@ -331,6 +485,71 @@
                 furniture.splice(index, 1);
                 drawRoom();
             }
+        }
+
+        // Edit furniture functions
+        function openEditModal(furnitureId) {
+            editingFurniture = furniture.find(f => f.id === furnitureId);
+            if (!editingFurniture) return;
+            
+            // Fill the form with current values
+            document.getElementById('editName').value = editingFurniture.name;
+            document.getElementById('editWidth').value = editingFurniture.width;
+            document.getElementById('editHeight').value = editingFurniture.height;
+            
+            // Show modal
+            document.getElementById('editModal').style.display = 'block';
+            
+            // Focus on name field
+            document.getElementById('editName').focus();
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+            editingFurniture = null;
+        }
+
+        function saveFurnitureEdit() {
+            if (!editingFurniture) return;
+            
+            const newName = document.getElementById('editName').value.trim() || 'רהיט';
+            const newWidth = parseInt(document.getElementById('editWidth').value);
+            const newHeight = parseInt(document.getElementById('editHeight').value);
+            
+            // Validate input
+            if (isNaN(newWidth) || newWidth < 1 || isNaN(newHeight) || newHeight < 1) {
+                alert('אנא הכנס מידות תקינות (מספרים חיוביים)');
+                return;
+            }
+            
+            // Check if furniture fits in room
+            const roomWidthCm = canvas.width / scale;
+            const roomHeightCm = canvas.height / scale;
+            
+            if (newWidth > roomWidthCm || newHeight > roomHeightCm) {
+                alert(`הרהיט גדול מדי עבור החדר!\nגודל החדר: ${Math.round(roomWidthCm)}x${Math.round(roomHeightCm)} ס"מ\nגודל הרהיט החדש: ${newWidth}x${newHeight} ס"מ`);
+                return;
+            }
+            
+            // Check if furniture will still fit in room after resize
+            const effectiveWidth = (editingFurniture.rotation % 180 === 90) ? newHeight : newWidth;
+            const effectiveHeight = (editingFurniture.rotation % 180 === 90) ? newWidth : newHeight;
+            
+            if (editingFurniture.x + effectiveWidth * scale > canvas.width ||
+                editingFurniture.y + effectiveHeight * scale > canvas.height) {
+                // Try to reposition furniture to fit
+                editingFurniture.x = Math.max(0, Math.min(canvas.width - effectiveWidth * scale, editingFurniture.x));
+                editingFurniture.y = Math.max(0, Math.min(canvas.height - effectiveHeight * scale, editingFurniture.y));
+            }
+            
+            // Update furniture properties
+            editingFurniture.name = newName;
+            editingFurniture.width = newWidth;
+            editingFurniture.height = newHeight;
+            
+            // Redraw and close modal
+            drawRoom();
+            closeEditModal();
         }
 
         // Mouse events
@@ -376,8 +595,32 @@
             isDragging = false;
         });
 
+        // Double-click to edit furniture
+        canvas.addEventListener('dblclick', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            // Find clicked furniture (from top to bottom)
+            for (let i = furniture.length - 1; i >= 0; i--) {
+                if (furniture[i].contains(x, y)) {
+                    openEditModal(furniture[i].id);
+                    break;
+                }
+            }
+        });
+
         // Keyboard events
         document.addEventListener('keydown', (e) => {
+            // Handle modal-specific keys first
+            if (document.getElementById('editModal').style.display === 'block') {
+                if (e.key === 'Escape') {
+                    closeEditModal();
+                }
+                return; // Don't handle other keys when modal is open
+            }
+            
+            // Handle furniture manipulation keys
             if (selectedFurniture) {
                 if (e.key === 'r' || e.key === 'R') {
                     selectedFurniture.rotate();
@@ -385,6 +628,24 @@
                 } else if (e.key === 'Delete') {
                     deleteFurniture(selectedFurniture.id);
                 }
+            }
+        });
+
+        // Modal event listeners
+        document.querySelector('.close').addEventListener('click', closeEditModal);
+        
+        // Close modal when clicking outside of it
+        window.addEventListener('click', (e) => {
+            const modal = document.getElementById('editModal');
+            if (e.target === modal) {
+                closeEditModal();
+            }
+        });
+        
+        // Allow Enter to save in edit modal
+        document.getElementById('editModal').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                saveFurnitureEdit();
             }
         });
 
