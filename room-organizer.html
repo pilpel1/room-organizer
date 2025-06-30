@@ -228,37 +228,37 @@
             background: #545b62;
         }
         
-        /* Reference control buttons */
-        button[onclick="saveCurrentAsReference()"] {
+        /* Reference control buttons (only for toolbar buttons, not context menu) */
+        .controls button[onclick="saveCurrentAsReference()"] {
             background: #17a2b8;
         }
         
-        button[onclick="saveCurrentAsReference()"]:hover {
+        .controls button[onclick="saveCurrentAsReference()"]:hover {
             background: #138496;
         }
         
-        button[onclick="clearReference()"] {
+        .controls button[onclick="clearReference()"] {
             background: #ffc107;
             color: #212529;
         }
         
-        button[onclick="clearReference()"]:hover {
+        .controls button[onclick="clearReference()"]:hover {
             background: #e0a800;
         }
         
-        button[onclick="document.getElementById('imageUpload').click()"] {
+        .controls button[onclick="document.getElementById('imageUpload').click()"] {
             background: #6f42c1;
         }
         
-        button[onclick="document.getElementById('imageUpload').click()"]:hover {
+        .controls button[onclick="document.getElementById('imageUpload').click()"]:hover {
             background: #5a32a3;
         }
         
-        button[onclick="exportAsImage()"] {
+        .controls button[onclick="exportAsImage()"] {
             background: #28a745;
         }
         
-        button[onclick="exportAsImage()"]:hover {
+        .controls button[onclick="exportAsImage()"]:hover {
             background: #1e7e34;
         }
         
@@ -281,17 +281,19 @@
             cursor: pointer;
             font-size: 14px;
             border: none;
-            background: none;
+            background: white !important;
             width: 100%;
             text-align: right;
             display: flex;
             align-items: center;
             gap: 8px;
-            color: #333;
+            color: #333 !important;
+            border-radius: 0;
         }
         
         .context-menu-item:hover {
-            background: #f0f0f0;
+            background: #f0f0f0 !important;
+            color: #333 !important;
         }
         
         .context-menu-item.danger:hover {
@@ -356,7 +358,8 @@
             <p style="margin-top: 10px; font-size: 14px; color: #666;">
                 <strong>הוראות:</strong> לחץ על רהיט כדי לבחור אותו, גרור להזזה, לחץ R לסיבוב, לחץ Delete למחיקה<br>
                 <strong>קליק כפול</strong> על רהיט או על השם ברשימה לעריכה<br>
-                <strong>לחצן ימני</strong> על רהיט לתפריט פעולות (נעילה, עריכה, מחיקה)<br>
+                <strong>לחצן ימני על רהיט</strong> לתפריט פעולות (נעילה, עריכה, מחיקה)<br>
+                <strong>לחצן ימני על מקום ריק</strong> לתפריט כללי (הוספת רהיט, רקע, ייצוא)<br>
                 <strong>קיצורי מקלדת:</strong> Ctrl+S לשמירת רקע, Ctrl+L לנעילת רהיט נבחר<br>
                 <strong>רקע רפרנס:</strong> "קבע כרקע רפרנס" שומר את המצב הנוכחי כרקע דהוי, "העלה תמונת רקע" טוען תמונה כרקע<br>
                 <strong>רהיטים קבועים:</strong> רהיטים עם 🔒 (דלתות/חלונות) לא ניתנים להזזה או לסיבוב
@@ -398,7 +401,7 @@
         </div>
     </div>
 
-    <!-- Context Menu -->
+    <!-- Context Menu for Furniture -->
     <div id="contextMenu" class="context-menu">
         <button class="context-menu-item" onclick="toggleFurnitureLock()">
             <span id="lockToggleText">🔒 נעל רהיט</span>
@@ -410,6 +413,27 @@
         <div class="context-menu-separator"></div>
         <button class="context-menu-item danger" onclick="deleteFromContext()">
             🗑️ מחק רהיט
+        </button>
+    </div>
+
+    <!-- Context Menu for Empty Canvas -->
+    <div id="canvasContextMenu" class="context-menu">
+        <button class="context-menu-item" onclick="addFurnitureFromContext()">
+            ➕ הוסף רהיט חדש
+        </button>
+        <div class="context-menu-separator"></div>
+        <button class="context-menu-item" onclick="saveCurrentAsReference()">
+            📌 קבע כרקע רפרנס
+        </button>
+        <button class="context-menu-item" onclick="document.getElementById('imageUpload').click()">
+            🖼️ העלה תמונת רקע
+        </button>
+        <button class="context-menu-item" onclick="clearReference()">
+            🧹 נקה רקע
+        </button>
+        <div class="context-menu-separator"></div>
+        <button class="context-menu-item" onclick="exportAsImage()">
+            💾 ייצא כתמונה
         </button>
     </div>
 
@@ -829,6 +853,9 @@
 
         // Context menu functions
         function showContextMenu(x, y, furniture) {
+            // Hide other menu first
+            document.getElementById('canvasContextMenu').style.display = 'none';
+            
             const contextMenu = document.getElementById('contextMenu');
             contextMenuTarget = furniture;
             
@@ -853,7 +880,29 @@
 
         function hideContextMenu() {
             document.getElementById('contextMenu').style.display = 'none';
+            document.getElementById('canvasContextMenu').style.display = 'none';
             contextMenuTarget = null;
+        }
+
+        function showCanvasContextMenu(x, y) {
+            // Hide other menu first
+            document.getElementById('contextMenu').style.display = 'none';
+            
+            const contextMenu = document.getElementById('canvasContextMenu');
+            
+            // Position menu
+            contextMenu.style.left = x + 'px';
+            contextMenu.style.top = y + 'px';
+            contextMenu.style.display = 'block';
+            
+            // Ensure menu stays within window bounds
+            const rect = contextMenu.getBoundingClientRect();
+            if (rect.right > window.innerWidth) {
+                contextMenu.style.left = (x - rect.width) + 'px';
+            }
+            if (rect.bottom > window.innerHeight) {
+                contextMenu.style.top = (y - rect.height) + 'px';
+            }
         }
 
         function toggleFurnitureLock() {
@@ -876,6 +925,14 @@
                 deleteFurniture(contextMenuTarget.id);
                 hideContextMenu();
             }
+        }
+
+        // Canvas context menu functions
+        function addFurnitureFromContext() {
+            // Focus on the furniture name input and scroll to controls
+            document.getElementById('furnitureName').focus();
+            document.querySelector('.controls').scrollIntoView({ behavior: 'smooth' });
+            hideContextMenu();
         }
 
         // Mouse events
@@ -958,8 +1015,10 @@
                 }
             }
             
-            // Hide context menu if no furniture clicked
-            hideContextMenu();
+            // No furniture clicked - show canvas context menu
+            selectedFurniture = null;
+            showCanvasContextMenu(e.clientX, e.clientY);
+            drawRoom();
         });
 
         // Keyboard events
@@ -1015,7 +1074,8 @@
             
             // Hide context menu when clicking outside
             const contextMenu = document.getElementById('contextMenu');
-            if (!contextMenu.contains(e.target)) {
+            const canvasContextMenu = document.getElementById('canvasContextMenu');
+            if (!contextMenu.contains(e.target) && !canvasContextMenu.contains(e.target)) {
                 hideContextMenu();
             }
         });
