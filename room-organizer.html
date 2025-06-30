@@ -100,6 +100,17 @@
             background: #e7f3ff;
         }
         
+        .furniture-item.fixed {
+            border-left: 4px solid #8B4513;
+            background: #f5f5dc;
+        }
+        
+        .furniture-item.fixed.selected {
+            border-color: #007bff;
+            background: #e7f3ff;
+            border-left: 4px solid #8B4513;
+        }
+        
         .delete-btn {
             background: #dc3545;
             padding: 5px 10px;
@@ -250,6 +261,49 @@
         button[onclick="exportAsImage()"]:hover {
             background: #1e7e34;
         }
+        
+        /* Context Menu */
+        .context-menu {
+            position: absolute;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            padding: 8px 0;
+            min-width: 150px;
+            z-index: 1000;
+            display: none;
+            direction: rtl;
+        }
+        
+        .context-menu-item {
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 14px;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: right;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #333;
+        }
+        
+        .context-menu-item:hover {
+            background: #f0f0f0;
+        }
+        
+        .context-menu-item.danger:hover {
+            background: #ffebee;
+            color: #d32f2f;
+        }
+        
+        .context-menu-separator {
+            height: 1px;
+            background: #eee;
+            margin: 4px 0;
+        }
     </style>
 </head>
 <body>
@@ -302,7 +356,10 @@
             <p style="margin-top: 10px; font-size: 14px; color: #666;">
                 <strong>הוראות:</strong> לחץ על רהיט כדי לבחור אותו, גרור להזזה, לחץ R לסיבוב, לחץ Delete למחיקה<br>
                 <strong>קליק כפול</strong> על רהיט או על השם ברשימה לעריכה<br>
-                <strong>רקע רפרנס:</strong> "קבע כרקע רפרנס" (Ctrl+S) שומר את המצב הנוכחי כרקע דהוי, "העלה תמונת רקע" טוען תמונה כרקע
+                <strong>לחצן ימני</strong> על רהיט לתפריט פעולות (נעילה, עריכה, מחיקה)<br>
+                <strong>קיצורי מקלדת:</strong> Ctrl+S לשמירת רקע, Ctrl+L לנעילת רהיט נבחר<br>
+                <strong>רקע רפרנס:</strong> "קבע כרקע רפרנס" שומר את המצב הנוכחי כרקע דהוי, "העלה תמונת רקע" טוען תמונה כרקע<br>
+                <strong>רהיטים קבועים:</strong> רהיטים עם 🔒 (דלתות/חלונות) לא ניתנים להזזה או לסיבוב
             </p>
         </div>
     </div>
@@ -327,12 +384,33 @@
                     <label for="editHeight">אורך (ס"מ):</label>
                     <input type="number" id="editHeight" min="1">
                 </div>
+                <div class="edit-input-group">
+                    <label>
+                        <input type="checkbox" id="editIsFixed" style="margin-left: 5px;">
+                        רהיט קבוע (לא ניתן להזזה)
+                    </label>
+                </div>
                 <div class="modal-buttons">
                     <button class="save-btn" onclick="saveFurnitureEdit()">שמור</button>
                     <button class="cancel-btn" onclick="closeEditModal()">ביטול</button>
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div id="contextMenu" class="context-menu">
+        <button class="context-menu-item" onclick="toggleFurnitureLock()">
+            <span id="lockToggleText">🔒 נעל רהיט</span>
+        </button>
+        <div class="context-menu-separator"></div>
+        <button class="context-menu-item" onclick="editFromContext()">
+            ✏️ ערוך רהיט
+        </button>
+        <div class="context-menu-separator"></div>
+        <button class="context-menu-item danger" onclick="deleteFromContext()">
+            🗑️ מחק רהיט
+        </button>
     </div>
 
     <script>
@@ -343,12 +421,13 @@
         let backgroundImage = null; // Background image reference
         let selectedFurniture = null;
         let editingFurniture = null;
+        let contextMenuTarget = null; // Furniture targeted by context menu
         let isDragging = false;
         let dragOffset = { x: 0, y: 0 };
         let scale = 1; // pixels per cm
 
         class Furniture {
-            constructor(name, width, height, x = 0, y = 0) {
+            constructor(name, width, height, x = 0, y = 0, isFixed = false) {
                 this.id = Math.random().toString(36).substr(2, 9);
                 this.name = name || 'רהיט';
                 this.width = width;
@@ -356,6 +435,7 @@
                 this.x = x;
                 this.y = y;
                 this.rotation = 0;
+                this.isFixed = isFixed;
                 this.color = this.getRandomColor();
             }
             
@@ -391,19 +471,44 @@
                     ctx.setLineDash([]);
                 } else {
                     // Draw normal furniture
-                    ctx.fillStyle = this.color;
-                    ctx.fillRect(-(this.width * scale) / 2, -(this.height * scale) / 2, 
-                               this.width * scale, this.height * scale);
-                    
-                    // Draw border
-                    ctx.strokeStyle = selectedFurniture === this ? '#007bff' : '#333';
-                    ctx.lineWidth = selectedFurniture === this ? 3 : 1;
-                    ctx.strokeRect(-(this.width * scale) / 2, -(this.height * scale) / 2, 
-                                 this.width * scale, this.height * scale);
+                    if (this.isFixed) {
+                        // Fixed furniture - darker color with pattern
+                        ctx.fillStyle = '#8B4513'; // Brown color for fixed items
+                        ctx.fillRect(-(this.width * scale) / 2, -(this.height * scale) / 2, 
+                                   this.width * scale, this.height * scale);
+                        
+                        // Draw double border for fixed furniture
+                        ctx.strokeStyle = selectedFurniture === this ? '#007bff' : '#654321';
+                        ctx.lineWidth = selectedFurniture === this ? 3 : 2;
+                        ctx.strokeRect(-(this.width * scale) / 2, -(this.height * scale) / 2, 
+                                     this.width * scale, this.height * scale);
+                        
+                        // Inner border
+                        ctx.strokeStyle = '#333';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(-(this.width * scale) / 2 + 3, -(this.height * scale) / 2 + 3, 
+                                     this.width * scale - 6, this.height * scale - 6);
+                        
+                        // Add lock icon indicator
+                        ctx.fillStyle = '#fff';
+                        ctx.font = 'bold 10px Arial';
+                        ctx.fillText('🔒', -(this.width * scale) / 2 + 8, -(this.height * scale) / 2 + 12);
+                    } else {
+                        // Regular movable furniture
+                        ctx.fillStyle = this.color;
+                        ctx.fillRect(-(this.width * scale) / 2, -(this.height * scale) / 2, 
+                                   this.width * scale, this.height * scale);
+                        
+                        // Draw border
+                        ctx.strokeStyle = selectedFurniture === this ? '#007bff' : '#333';
+                        ctx.lineWidth = selectedFurniture === this ? 3 : 1;
+                        ctx.strokeRect(-(this.width * scale) / 2, -(this.height * scale) / 2, 
+                                     this.width * scale, this.height * scale);
+                    }
                     
                     // Draw name
-                    ctx.fillStyle = '#333';
-                    ctx.font = '12px Arial';
+                    ctx.fillStyle = this.isFixed ? '#fff' : '#333';
+                    ctx.font = this.isFixed ? 'bold 12px Arial' : '12px Arial';
                     ctx.textAlign = 'center';
                     ctx.fillText(this.name, 0, 4);
                 }
@@ -534,7 +639,7 @@
                 return;
             }
             
-            const newFurniture = new Furniture(name, width, height, 20, 20);
+            const newFurniture = new Furniture(name, width, height, 20, 20, false); // All furniture starts as movable
             furniture.push(newFurniture);
             
             // Clear input
@@ -558,13 +663,15 @@
             
             furniture.forEach(f => {
                 const item = document.createElement('div');
-                item.className = 'furniture-item' + (selectedFurniture === f ? ' selected' : '');
+                item.className = 'furniture-item' + (selectedFurniture === f ? ' selected' : '') + (f.isFixed ? ' fixed' : '');
                 const rotationText = f.rotation ? ` (${f.rotation}°)` : '';
+                const fixedIcon = f.isFixed ? ' 🔒' : '';
+                const fixedStyle = f.isFixed ? 'font-weight: bold; color: #8B4513;' : '';
                 item.innerHTML = `
                     <span onclick="selectFurniture('${f.id}')" ondblclick="openEditModal('${f.id}')" 
-                          style="cursor: pointer; flex-grow: 1;" 
-                          title="קליק כפול לעריכה">
-                        ${f.name} (${f.getEffectiveWidth()}x${f.getEffectiveHeight()} ס"מ)${rotationText}
+                          style="cursor: pointer; flex-grow: 1; ${fixedStyle}" 
+                          title="קליק כפול לעריכה${f.isFixed ? ' • רהיט קבוע' : ''}">
+                        ${f.name}${fixedIcon} (${f.getEffectiveWidth()}x${f.getEffectiveHeight()} ס"מ)${rotationText}
                     </span>
                     <button class="delete-btn" onclick="deleteFurniture('${f.id}')">מחק</button>
                 `;
@@ -597,6 +704,7 @@
             document.getElementById('editName').value = editingFurniture.name;
             document.getElementById('editWidth').value = editingFurniture.width;
             document.getElementById('editHeight').value = editingFurniture.height;
+            document.getElementById('editIsFixed').checked = editingFurniture.isFixed;
             
             // Show modal
             document.getElementById('editModal').style.display = 'block';
@@ -616,6 +724,7 @@
             const newName = document.getElementById('editName').value.trim() || 'רהיט';
             const newWidth = parseInt(document.getElementById('editWidth').value);
             const newHeight = parseInt(document.getElementById('editHeight').value);
+            const newIsFixed = document.getElementById('editIsFixed').checked;
             
             // Validate input
             if (isNaN(newWidth) || newWidth < 1 || isNaN(newHeight) || newHeight < 1) {
@@ -647,6 +756,7 @@
             editingFurniture.name = newName;
             editingFurniture.width = newWidth;
             editingFurniture.height = newHeight;
+            editingFurniture.isFixed = newIsFixed;
             
             // Redraw and close modal
             drawRoom();
@@ -662,7 +772,7 @@
             
             // Deep copy current furniture to reference
             referenceFurniture = furniture.map(f => {
-                const copy = new Furniture(f.name, f.width, f.height, f.x, f.y);
+                const copy = new Furniture(f.name, f.width, f.height, f.x, f.y, f.isFixed);
                 copy.rotation = f.rotation;
                 copy.color = f.color;
                 copy.id = f.id + '_ref'; // Different ID for reference
@@ -717,6 +827,57 @@
             link.click();
         }
 
+        // Context menu functions
+        function showContextMenu(x, y, furniture) {
+            const contextMenu = document.getElementById('contextMenu');
+            contextMenuTarget = furniture;
+            
+            // Update lock toggle text
+            const lockText = document.getElementById('lockToggleText');
+            lockText.textContent = furniture.isFixed ? '🔓 בטל נעילה' : '🔒 נעל רהיט';
+            
+            // Position menu
+            contextMenu.style.left = x + 'px';
+            contextMenu.style.top = y + 'px';
+            contextMenu.style.display = 'block';
+            
+            // Ensure menu stays within window bounds
+            const rect = contextMenu.getBoundingClientRect();
+            if (rect.right > window.innerWidth) {
+                contextMenu.style.left = (x - rect.width) + 'px';
+            }
+            if (rect.bottom > window.innerHeight) {
+                contextMenu.style.top = (y - rect.height) + 'px';
+            }
+        }
+
+        function hideContextMenu() {
+            document.getElementById('contextMenu').style.display = 'none';
+            contextMenuTarget = null;
+        }
+
+        function toggleFurnitureLock() {
+            if (contextMenuTarget) {
+                contextMenuTarget.isFixed = !contextMenuTarget.isFixed;
+                drawRoom();
+                hideContextMenu();
+            }
+        }
+
+        function editFromContext() {
+            if (contextMenuTarget) {
+                openEditModal(contextMenuTarget.id);
+                hideContextMenu();
+            }
+        }
+
+        function deleteFromContext() {
+            if (contextMenuTarget) {
+                deleteFurniture(contextMenuTarget.id);
+                hideContextMenu();
+            }
+        }
+
         // Mouse events
         canvas.addEventListener('mousedown', (e) => {
             const rect = canvas.getBoundingClientRect();
@@ -729,9 +890,13 @@
             for (let i = furniture.length - 1; i >= 0; i--) {
                 if (furniture[i].contains(x, y)) {
                     selectedFurniture = furniture[i];
-                    isDragging = true;
-                    dragOffset.x = x - selectedFurniture.x - (selectedFurniture.getEffectiveWidth() * scale) / 2;
-                    dragOffset.y = y - selectedFurniture.y - (selectedFurniture.getEffectiveHeight() * scale) / 2;
+                    
+                    // Only allow dragging if furniture is not fixed
+                    if (!selectedFurniture.isFixed) {
+                        isDragging = true;
+                        dragOffset.x = x - selectedFurniture.x - (selectedFurniture.getEffectiveWidth() * scale) / 2;
+                        dragOffset.y = y - selectedFurniture.y - (selectedFurniture.getEffectiveHeight() * scale) / 2;
+                    }
                     break;
                 }
             }
@@ -775,6 +940,28 @@
             }
         });
 
+        // Right-click for context menu
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            // Find clicked furniture (from top to bottom)
+            for (let i = furniture.length - 1; i >= 0; i--) {
+                if (furniture[i].contains(x, y)) {
+                    selectedFurniture = furniture[i];
+                    showContextMenu(e.clientX, e.clientY, furniture[i]);
+                    drawRoom();
+                    return;
+                }
+            }
+            
+            // Hide context menu if no furniture clicked
+            hideContextMenu();
+        });
+
         // Keyboard events
         document.addEventListener('keydown', (e) => {
             // Handle modal-specific keys first
@@ -792,11 +979,24 @@
                 return;
             }
             
+            if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
+                e.preventDefault();
+                if (selectedFurniture) {
+                    selectedFurniture.isFixed = !selectedFurniture.isFixed;
+                    drawRoom();
+                }
+                return;
+            }
+            
             // Handle furniture manipulation keys
             if (selectedFurniture) {
                 if (e.key === 'r' || e.key === 'R') {
-                    selectedFurniture.rotate();
-                    drawRoom();
+                    if (selectedFurniture.isFixed) {
+                        alert('לא ניתן לסובב רהיטים קבועים');
+                    } else {
+                        selectedFurniture.rotate();
+                        drawRoom();
+                    }
                 } else if (e.key === 'Delete') {
                     deleteFurniture(selectedFurniture.id);
                 }
@@ -811,6 +1011,12 @@
             const modal = document.getElementById('editModal');
             if (e.target === modal) {
                 closeEditModal();
+            }
+            
+            // Hide context menu when clicking outside
+            const contextMenu = document.getElementById('contextMenu');
+            if (!contextMenu.contains(e.target)) {
+                hideContextMenu();
             }
         });
         
