@@ -1087,6 +1087,25 @@
             }
         });
 
+        // Allow Enter to add furniture from input fields
+        document.getElementById('furnitureName').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                addFurniture();
+            }
+        });
+        
+        document.getElementById('furnitureWidth').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                addFurniture();
+            }
+        });
+        
+        document.getElementById('furnitureHeight').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                addFurniture();
+            }
+        });
+
         // Initialize
         createRoom();
     </script>
